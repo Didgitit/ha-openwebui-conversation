@@ -35,6 +35,7 @@ from .const import (
     CONF_API_KEY,
     CONF_TIMEOUT,
     CONF_MODEL,
+    CONF_TOOL_IDS,
     CONF_LANGUAGE_CODE,
     CONF_SEARCH_ENABLED,
     CONF_SEARCH_SENTENCES,
@@ -45,6 +46,7 @@ from .const import (
     DEFAULT_BASE_URL,
     DEFAULT_TIMEOUT,
     DEFAULT_MODEL,
+    DEFAULT_TOOL_IDS,
     DEFAULT_LANGUAGE_CODE,
     DEFAULT_SEARCH_ENABLED,
     DEFAULT_SEARCH_SENTENCES,
@@ -73,6 +75,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
     {
         CONF_TIMEOUT: DEFAULT_TIMEOUT,
         CONF_MODEL: DEFAULT_MODEL,
+        CONF_TOOL_IDS: DEFAULT_TOOL_IDS,
         CONF_SEARCH_ENABLED: DEFAULT_SEARCH_ENABLED,
         CONF_SEARCH_SENTENCES: DEFAULT_SEARCH_SENTENCES,
         CONF_SEARCH_RESULT_PREFIX: DEFAULT_SEARCH_RESULT_PREFIX,
@@ -205,6 +208,36 @@ class OpenWebUIOptionsFlow(config_entries.OptionsFlow):
             step_id="model_config", data_schema=vol.Schema(schema)
         )
 
+    async def async_step_tools_config(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage Tools Settings."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return self.async_create_entry(title="", data=self.options)
+
+        try:
+            client = OpenWebUIApiClient(
+                base_url=cv.url_no_path(self.config_entry.data[CONF_BASE_URL]),
+                api_key=self.config_entry.data[CONF_API_KEY],
+                timeout=self.options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
+                session=async_create_clientsession(self.hass),
+                verify_ssl=self.options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            )
+            response = await client.async_get_tools()
+            # Response shape: handle either a bare list or {"data": [...]}
+            tools = response if isinstance(response, list) else response.get("data", [])
+        except ApiClientError as exception:
+            LOGGER.exception("Unexpected exception: %s", exception)
+            tools = []
+
+        schema = openwebui_schema_tools_config(
+            self.options, [tool["id"] for tool in tools]
+        )
+        return self.async_show_form(
+            step_id="tools_config", data_schema=vol.Schema(schema)
+        )
+
     async def async_step_search_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -279,6 +312,32 @@ def openwebui_schema_model_config(
             },
             default=DEFAULT_STRIP_MARKDOWN,
         ): BooleanSelector(BooleanSelectorConfig())
+    }
+
+
+def openwebui_schema_tools_config(
+    options: MappingProxyType[str, Any], TOOLS: []
+) -> dict:
+    """Return a schema for tools config."""
+    if not options:
+        options = DEFAULT_OPTIONS
+    return {
+        vol.Optional(
+            CONF_TOOL_IDS,
+            description={
+                "suggested_value": options.get(CONF_TOOL_IDS, DEFAULT_TOOL_IDS)
+            },
+            default=DEFAULT_TOOL_IDS,
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=TOOLS,
+                mode=SelectSelectorMode.DROPDOWN,
+                multiple=True,
+                custom_value=True,
+                translation_key=CONF_TOOL_IDS,
+                sort=True,
+            )
+        ),
     }
 
 
