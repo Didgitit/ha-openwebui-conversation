@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 
 from hassil import recognize
@@ -153,20 +154,13 @@ class OpenWebUIAgent(conversation.ConversationEntity):
         with async_get_chat_log(self.hass, user_input) as chat_log:
             conversation_id = chat_log.conversation_id or user_input.conversation_id or ulid.ulid()
 
-            # Build previous conversation history as list[Message] from HA's managed chat_log.
-            # This ensures proper retention for ConversationEntity threads (e.g. Assistant UI).
             for content in chat_log.content:
                 if hasattr(content, "role") and hasattr(content, "content") and content.role in ("user", "assistant"):
                     conversation_history.append(Message(content.role, content.content))
 
-            # chat_log.content usually ends with the current user message (added by the pipeline).
-            # We will append the (possibly search-rewritten) current user prompt inside query(),
-            # so drop the last user entry to avoid sending duplicate current user turn.
             if conversation_history and conversation_history[-1].role == "user":
                 conversation_history.pop()
 
-            # If chat_log doesn't provide prior turns (common in some setups), fall back to
-            # the legacy self.history which accumulates turns under the conversation_id.
             if len(conversation_history) == 0 and conversation_id in self.history:
                 conversation_history = list(self.history[conversation_id])
                 LOGGER.debug("Falling back to legacy self.history for conv %s (%d turns)", conversation_id, len(conversation_history))
@@ -180,7 +174,7 @@ class OpenWebUIAgent(conversation.ConversationEntity):
             )
 
             try:
-                response = await self.query(
+                response_data = await self.query(
                     prompt, conversation_history, should_search
                 )
             except (ApiCommError, ApiJsonError, ApiTimeoutError) as err:
@@ -204,7 +198,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
                     response=intent_response, conversation_id=conversation_id
                 )
             else:
-                response_data = response["choices"][0]["message"]["content"]
                 if self.strip_markdown:
                     response_data = self.markdown_parser.render(response_data)
                 if should_search:
@@ -215,8 +208,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
                 conversation_history.append(response_message)
                 self.history[conversation_id] = conversation_history
 
-                # Sync the turn back to HA's chat_log so the thread state is correct for future calls
-                # and the Assistant UI.
                 try:
                     from homeassistant.components.conversation.chat_log import AssistantContent
                     chat_log.async_add_assistant_content(
@@ -227,7 +218,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
                     )
                 except Exception as err:
                     LOGGER.error("Failed to add assistant turn to chat_log (history may not persist): %s", err)
-                    # Still continue; self.history is updated for this instance's lifetime.
 
                 intent_response = intent.IntentResponse(language=user_input.language)
                 intent_response.async_set_speech(response_data)
@@ -237,32 +227,59 @@ class OpenWebUIAgent(conversation.ConversationEntity):
 
         return conversation_result
 
-    async def query(self, prompt: str, history: list[Message], search: bool) -> any:
-        """Process a sentence."""
+    async def query(self, prompt: str, history: list[Message], search: bool) -> str:
+        """Run a full Path A agentic loop via OWUI and return the finished response text."""
         model = self.entry.options.get(CONF_MODEL, DEFAULT_MODEL)
 
         message_list = [{"role": x.role, "content": x.message} for x in history]
         message_list.append({"role": "user", "content": prompt})
 
         LOGGER.debug("Sending %d messages to OpenWebUI (model=%s)", len(message_list), model)
-
-        payload = {
-            "model": model,
-            "messages": message_list,
-            "stream": False,
-            "features": {"web_search": search},
-        }
-
         LOGGER.debug("Prompt for %s: %s", model, prompt)
-        LOGGER.debug("Request payload: %s", payload)
 
-        result = await self.client.async_generate(payload)
+        user_msg_id = str(uuid.uuid4())
+        assistant_msg_id = str(uuid.uuid4())
 
-        return result
+        # Step 1: Create the chat record in OWUI
+        chat_id = await self.client.async_create_chat(
+            model=model,
+            prompt=prompt,
+            user_msg_id=user_msg_id,
+            assistant_msg_id=assistant_msg_id,
+        )
+        LOGGER.debug("Created OWUI chat %s", chat_id)
+
+        try:
+            # Step 2: Fire the completion — OWUI runs tools server-side
+            await self.client.async_fire_completion(
+                model=model,
+                messages=message_list,
+                chat_id=chat_id,
+                assistant_msg_id=assistant_msg_id,
+                features={"web_search": search, "code_interpreter": False, "image_generation": False, "memory": False},
+            )
+            LOGGER.debug("Fired completion for chat %s, polling for result", chat_id)
+
+            # Step 3: Poll until OWUI finishes all tool calls
+            await self.client.async_poll_tasks(chat_id)
+            LOGGER.debug("Tasks complete for chat %s, reading result", chat_id)
+
+            # Step 4: Read the finished response
+            response_data = await self.client.async_read_result(chat_id, assistant_msg_id)
+            LOGGER.debug("Got response for chat %s: %s", chat_id, response_data[:100])
+
+        finally:
+            # Always clean up the chat record
+            try:
+                await self.client.async_delete_chat(chat_id)
+                LOGGER.debug("Deleted OWUI chat %s", chat_id)
+            except Exception as err:
+                LOGGER.warning("Failed to delete OWUI chat %s: %s", chat_id, err)
+
+        return response_data
 
     async def _async_entry_update_listener(
         self, hass: HomeAssistant, entry: ConfigEntry
     ) -> None:
         """Handle options update."""
-        # Reload as we update device info + entity name + supported features
         await hass.config_entries.async_reload(entry.entry_id)
