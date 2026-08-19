@@ -32,6 +32,7 @@ from .const import (
     CONF_API_KEY,
     CONF_TIMEOUT,
     CONF_MODEL,
+    CONF_TOOL_IDS,
     CONF_LANGUAGE_CODE,
     CONF_SEARCH_ENABLED,
     CONF_SEARCH_SENTENCES,
@@ -40,6 +41,7 @@ from .const import (
     CONF_VERIFY_SSL,
     DEFAULT_TIMEOUT,
     DEFAULT_MODEL,
+    DEFAULT_TOOL_IDS,
     DEFAULT_LANGUAGE_CODE,
     DEFAULT_SEARCH_ENABLED,
     DEFAULT_SEARCH_SENTENCES,
@@ -230,6 +232,7 @@ class OpenWebUIAgent(conversation.ConversationEntity):
     async def query(self, prompt: str, history: list[Message], search: bool) -> str:
         """Run a full Path A agentic loop via OWUI and return the finished response text."""
         model = self.entry.options.get(CONF_MODEL, DEFAULT_MODEL)
+        tool_ids = self.entry.options.get(CONF_TOOL_IDS, DEFAULT_TOOL_IDS)
 
         message_list = [{"role": x.role, "content": x.message} for x in history]
         message_list.append({"role": "user", "content": prompt})
@@ -256,6 +259,7 @@ class OpenWebUIAgent(conversation.ConversationEntity):
                 messages=message_list,
                 chat_id=chat_id,
                 assistant_msg_id=assistant_msg_id,
+                tool_ids=tool_ids,
                 features={"web_search": search, "code_interpreter": False, "image_generation": False, "memory": False},
             )
             LOGGER.debug("Fired completion for chat %s, polling for result", chat_id)
