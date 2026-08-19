@@ -64,4 +64,4 @@ class OpenWebUIApiClient:
         prompt: str,
         user_msg_id: str,
         assistant_msg_id: str,
-    ) ->
+    ) -> None:
