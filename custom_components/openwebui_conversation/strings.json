@@ -27,6 +27,7 @@
                 "menu_options": {
                     "general_config": "General Settings",
                     "model_config": "Model Configuration",
+                    "tools_config": "Tools Configuration",
                     "search_config": "Search Configuration"
                 }
             },
@@ -43,6 +44,12 @@
                 "data": {
                     "chat_model": "Model",
                     "strip_markdown": "Strip Markdown"
+                }
+            },
+            "tools_config": {
+                "title": "Tools Configuration",
+                "data": {
+                    "tool_ids": "Enabled Tools"
                 }
             },
             "search_config": {
