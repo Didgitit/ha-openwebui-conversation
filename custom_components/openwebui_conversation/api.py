@@ -46,6 +46,14 @@ class OpenWebUIApiClient:
             headers=self._auth_headers(),
         )
 
+    async def async_get_tools(self) -> any:
+        """Get available tools from the API."""
+        return await self._api_wrapper(
+            method="get",
+            url=f"{self._base_url}/api/v1/tools/",
+            headers=self._auth_headers(),
+        )
+
     async def async_generate(
         self,
         data: dict | None = None,
