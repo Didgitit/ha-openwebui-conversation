@@ -5,9 +5,6 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from hassil import recognize
-from hassil.intents import Intents
-
 from homeassistant.components import conversation
 from homeassistant.components.conversation import async_get_chat_log
 from homeassistant.config_entries import ConfigEntry
@@ -27,25 +24,26 @@ from mdit_plain.renderer import RendererPlain
 from .api import OpenWebUIApiClient
 from .const import (
     LOGGER,
-    DO_SEARCH_INTENT,
     CONF_BASE_URL,
     CONF_API_KEY,
     CONF_TIMEOUT,
     CONF_MODEL,
     CONF_TOOL_IDS,
     CONF_LANGUAGE_CODE,
-    CONF_SEARCH_ENABLED,
-    CONF_SEARCH_SENTENCES,
-    CONF_SEARCH_RESULT_PREFIX,
+    CONF_WEB_SEARCH,
+    CONF_CODE_INTERPRETER,
+    CONF_IMAGE_GENERATION,
+    CONF_MEMORY,
     CONF_STRIP_MARKDOWN,
     CONF_VERIFY_SSL,
     DEFAULT_TIMEOUT,
     DEFAULT_MODEL,
     DEFAULT_TOOL_IDS,
     DEFAULT_LANGUAGE_CODE,
-    DEFAULT_SEARCH_ENABLED,
-    DEFAULT_SEARCH_SENTENCES,
-    DEFAULT_SEARCH_RESULT_PREFIX,
+    DEFAULT_WEB_SEARCH,
+    DEFAULT_CODE_INTERPRETER,
+    DEFAULT_IMAGE_GENERATION,
+    DEFAULT_MEMORY,
     DEFAULT_STRIP_MARKDOWN,
     DEFAULT_VERIFY_SSL,
 )
@@ -80,19 +78,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
             verify_ssl=entry.options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
         )
         self.history: dict[str, list[Message]] = {}
-        self.search_enabled = entry.options.get(
-            CONF_SEARCH_ENABLED, DEFAULT_SEARCH_ENABLED
-        )
-        self.search_sentences = [
-            x
-            for x in entry.options.get(
-                CONF_SEARCH_SENTENCES, DEFAULT_SEARCH_SENTENCES
-            ).splitlines()
-            if x.strip()
-        ]
-        self.search_result_prefix = entry.options.get(
-            CONF_SEARCH_RESULT_PREFIX, DEFAULT_SEARCH_RESULT_PREFIX
-        )
         self.lang = entry.options.get(CONF_LANGUAGE_CODE, DEFAULT_LANGUAGE_CODE).strip()
         self._attr_name = entry.title
         self._attr_unique_id = entry.entry_id
@@ -125,30 +110,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
         user_message = Message("user", user_input.text)
         prompt = user_message.message
 
-        should_search = False
-
-        if self.search_enabled and len(self.search_sentences):
-            i = Intents.from_dict(
-                {
-                    "language": self.lang,
-                    "settings": {"ignore_whitespace": True},
-                    "intents": {
-                        DO_SEARCH_INTENT: {
-                            "data": [{"sentences": self.search_sentences}]
-                        }
-                    },
-                    "lists": {"query": {"wildcard": True}},
-                }
-            )
-            r = recognize(prompt, i)
-            if r is not None:
-                if (
-                    r.intent.name == DO_SEARCH_INTENT
-                    and r.entities.get("query", None) is not None
-                ):
-                    prompt = r.entities["query"].value
-                    should_search = True
-
         conversation_result = None
         conversation_id = user_input.conversation_id or ulid.ulid()
         conversation_history: list[Message] = []
@@ -176,9 +137,7 @@ class OpenWebUIAgent(conversation.ConversationEntity):
             )
 
             try:
-                response_data = await self.query(
-                    prompt, conversation_history, should_search
-                )
+                response_data = await self.query(prompt, conversation_history)
             except (ApiCommError, ApiJsonError, ApiTimeoutError) as err:
                 LOGGER.error("Error generating prompt: %s (cause: %s)", err, err.__cause__)
                 intent_response = intent.IntentResponse(language=user_input.language)
@@ -202,8 +161,6 @@ class OpenWebUIAgent(conversation.ConversationEntity):
             else:
                 if self.strip_markdown:
                     response_data = self.markdown_parser.render(response_data)
-                if should_search:
-                    response_data = f"{self.search_result_prefix} {response_data}"
                 response_message = Message("assistant", response_data)
 
                 conversation_history.append(user_message)
@@ -229,10 +186,20 @@ class OpenWebUIAgent(conversation.ConversationEntity):
 
         return conversation_result
 
-    async def query(self, prompt: str, history: list[Message], search: bool) -> str:
+    async def query(self, prompt: str, history: list[Message]) -> str:
         """Run a full Path A agentic loop via OWUI and return the finished response text."""
         model = self.entry.options.get(CONF_MODEL, DEFAULT_MODEL)
         tool_ids = self.entry.options.get(CONF_TOOL_IDS, DEFAULT_TOOL_IDS)
+        features = {
+            "web_search": self.entry.options.get(CONF_WEB_SEARCH, DEFAULT_WEB_SEARCH),
+            "code_interpreter": self.entry.options.get(
+                CONF_CODE_INTERPRETER, DEFAULT_CODE_INTERPRETER
+            ),
+            "image_generation": self.entry.options.get(
+                CONF_IMAGE_GENERATION, DEFAULT_IMAGE_GENERATION
+            ),
+            "memory": self.entry.options.get(CONF_MEMORY, DEFAULT_MEMORY),
+        }
 
         message_list = [{"role": x.role, "content": x.message} for x in history]
         message_list.append({"role": "user", "content": prompt})
@@ -260,7 +227,7 @@ class OpenWebUIAgent(conversation.ConversationEntity):
                 chat_id=chat_id,
                 assistant_msg_id=assistant_msg_id,
                 tool_ids=tool_ids,
-                features={"web_search": search, "code_interpreter": False, "image_generation": False, "memory": False},
+                features=features,
             )
             LOGGER.debug("Fired completion for chat %s, polling for result", chat_id)
 
