@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Literal
 
@@ -36,6 +37,7 @@ from .const import (
     CONF_MEMORY,
     CONF_STRIP_MARKDOWN,
     CONF_VERIFY_SSL,
+    CONF_KEEP_CHAT_HISTORY,
     DEFAULT_TIMEOUT,
     DEFAULT_MODEL,
     DEFAULT_TOOL_IDS,
@@ -46,6 +48,7 @@ from .const import (
     DEFAULT_MEMORY,
     DEFAULT_STRIP_MARKDOWN,
     DEFAULT_VERIFY_SSL,
+    DEFAULT_KEEP_CHAT_HISTORY,
 )
 from .exceptions import ApiCommError, ApiJsonError, ApiTimeoutError
 from .message import Message
@@ -190,6 +193,9 @@ class OpenWebUIAgent(conversation.ConversationEntity):
         """Run a full Path A agentic loop via OWUI and return the finished response text."""
         model = self.entry.options.get(CONF_MODEL, DEFAULT_MODEL)
         tool_ids = self.entry.options.get(CONF_TOOL_IDS, DEFAULT_TOOL_IDS)
+        keep_chat_history = self.entry.options.get(
+            CONF_KEEP_CHAT_HISTORY, DEFAULT_KEEP_CHAT_HISTORY
+        )
         features = {
             "web_search": self.entry.options.get(CONF_WEB_SEARCH, DEFAULT_WEB_SEARCH),
             "code_interpreter": self.entry.options.get(
@@ -210,14 +216,23 @@ class OpenWebUIAgent(conversation.ConversationEntity):
         user_msg_id = str(uuid.uuid4())
         assistant_msg_id = str(uuid.uuid4())
 
+        # Build a title. When chat history is kept, tag it with the last 5
+        # digits of the current unix timestamp so entries are distinguishable
+        # at a glance without being a full, unwieldy timestamp.
+        if keep_chat_history:
+            title = f"HA Voice {str(int(time.time()))[-5:]}"
+        else:
+            title = "HA Voice"
+
         # Step 1: Create the chat record in OWUI
         chat_id = await self.client.async_create_chat(
             model=model,
             prompt=prompt,
             user_msg_id=user_msg_id,
             assistant_msg_id=assistant_msg_id,
+            title=title,
         )
-        LOGGER.debug("Created OWUI chat %s", chat_id)
+        LOGGER.debug("Created OWUI chat %s (title=%s)", chat_id, title)
 
         try:
             # Step 2: Fire the completion — OWUI runs tools server-side
@@ -240,12 +255,16 @@ class OpenWebUIAgent(conversation.ConversationEntity):
             LOGGER.debug("Got response for chat %s: %s", chat_id, response_data[:100])
 
         finally:
-            # Always clean up the chat record
-            try:
-                await self.client.async_delete_chat(chat_id)
-                LOGGER.debug("Deleted OWUI chat %s", chat_id)
-            except Exception as err:
-                LOGGER.warning("Failed to delete OWUI chat %s: %s", chat_id, err)
+            # Step 5: Clean up the chat record, unless the user wants to keep
+            # it around for inspection (e.g. prompt/tool debugging).
+            if not keep_chat_history:
+                try:
+                    await self.client.async_delete_chat(chat_id)
+                    LOGGER.debug("Deleted OWUI chat %s", chat_id)
+                except Exception as err:
+                    LOGGER.warning("Failed to delete OWUI chat %s: %s", chat_id, err)
+            else:
+                LOGGER.debug("Keeping OWUI chat %s (keep_chat_history enabled)", chat_id)
 
         return response_data
 
