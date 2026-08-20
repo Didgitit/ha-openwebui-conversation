@@ -36,7 +36,8 @@
                 "data": {
                     "timeout": "API Timeout",
                     "lang_code": "Language Code",
-                    "verify_ssl": "Verify SSL"
+                    "verify_ssl": "Verify SSL",
+                    "keep_chat_history": "Keep Chat History"
                 }
             },
             "model_config": {
