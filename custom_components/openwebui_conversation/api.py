@@ -72,12 +72,13 @@ class OpenWebUIApiClient:
         prompt: str,
         user_msg_id: str,
         assistant_msg_id: str,
+        title: str = "HA Voice",
     ) -> str:
         """Create a chat record in OWUI and return the chat_id."""
         now = int(time.time())
         payload = {
             "chat": {
-                "title": "HA Voice",
+                "title": title,
                 "models": [model],
                 "history": {
                     "currentId": assistant_msg_id,
