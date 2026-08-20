@@ -21,6 +21,7 @@ CONF_IMAGE_GENERATION = "image_generation_enabled"
 CONF_MEMORY = "memory_enabled"
 CONF_STRIP_MARKDOWN = "strip_markdown"
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_KEEP_CHAT_HISTORY = "keep_chat_history"
 
 DEFAULT_SERVICE_NAME = "OpenWebUI"
 DEFAULT_BASE_URL = "http://openwebui.homeassistant.local"
@@ -34,3 +35,4 @@ DEFAULT_IMAGE_GENERATION = False
 DEFAULT_MEMORY = False
 DEFAULT_STRIP_MARKDOWN = False
 DEFAULT_VERIFY_SSL = True
+DEFAULT_KEEP_CHAT_HISTORY = False
