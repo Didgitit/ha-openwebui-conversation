@@ -41,6 +41,7 @@ from .const import (
     CONF_MEMORY,
     CONF_STRIP_MARKDOWN,
     CONF_VERIFY_SSL,
+    CONF_KEEP_CHAT_HISTORY,
     DEFAULT_SERVICE_NAME,
     DEFAULT_BASE_URL,
     DEFAULT_TIMEOUT,
@@ -53,6 +54,7 @@ from .const import (
     DEFAULT_MEMORY,
     DEFAULT_STRIP_MARKDOWN,
     DEFAULT_VERIFY_SSL,
+    DEFAULT_KEEP_CHAT_HISTORY,
 )
 from .exceptions import ApiClientError, ApiCommError, ApiTimeoutError
 
@@ -81,6 +83,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_IMAGE_GENERATION: DEFAULT_IMAGE_GENERATION,
         CONF_MEMORY: DEFAULT_MEMORY,
         CONF_STRIP_MARKDOWN: DEFAULT_STRIP_MARKDOWN,
+        CONF_KEEP_CHAT_HISTORY: DEFAULT_KEEP_CHAT_HISTORY,
     }
 )
 
@@ -280,7 +283,16 @@ def openwebui_schema_general_config(options: MappingProxyType[str, Any]) -> dict
                 )
             },
             default=DEFAULT_VERIFY_SSL,
-        ): BooleanSelector(BooleanSelectorConfig())
+        ): BooleanSelector(BooleanSelectorConfig()),
+        vol.Required(
+            CONF_KEEP_CHAT_HISTORY,
+            description={
+                "suggested_value": options.get(
+                    CONF_KEEP_CHAT_HISTORY, DEFAULT_KEEP_CHAT_HISTORY
+                )
+            },
+            default=DEFAULT_KEEP_CHAT_HISTORY,
+        ): BooleanSelector(BooleanSelectorConfig()),
     }
 
 
