@@ -28,7 +28,7 @@
                     "general_config": "General Settings",
                     "model_config": "Model Configuration",
                     "tools_config": "Tools Configuration",
-                    "search_config": "Search Configuration"
+                    "features_config": "Feature Configuration"
                 }
             },
             "general_config": {
@@ -52,12 +52,13 @@
                     "tool_ids": "Enabled Tools"
                 }
             },
-            "search_config": {
-                "title": "Search Configuration",
+            "features_config": {
+                "title": "Feature Configuration",
                 "data": {
-                    "search_enabled": "Search Enabled",
-                    "search_sentences": "Search Trigger Sentences",
-                    "search_result_prefix": "Search Results Message Prefix"
+                    "web_search_enabled": "Web Search",
+                    "code_interpreter_enabled": "Code Interpreter",
+                    "image_generation_enabled": "Image Generation",
+                    "memory_enabled": "Memory"
                 }
             }
         }
