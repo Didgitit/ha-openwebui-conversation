@@ -15,8 +15,6 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
     BooleanSelectorConfig,
-    TemplateSelector,
-    TemplateSelectorConfig,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -37,9 +35,10 @@ from .const import (
     CONF_MODEL,
     CONF_TOOL_IDS,
     CONF_LANGUAGE_CODE,
-    CONF_SEARCH_ENABLED,
-    CONF_SEARCH_SENTENCES,
-    CONF_SEARCH_RESULT_PREFIX,
+    CONF_WEB_SEARCH,
+    CONF_CODE_INTERPRETER,
+    CONF_IMAGE_GENERATION,
+    CONF_MEMORY,
     CONF_STRIP_MARKDOWN,
     CONF_VERIFY_SSL,
     DEFAULT_SERVICE_NAME,
@@ -48,9 +47,10 @@ from .const import (
     DEFAULT_MODEL,
     DEFAULT_TOOL_IDS,
     DEFAULT_LANGUAGE_CODE,
-    DEFAULT_SEARCH_ENABLED,
-    DEFAULT_SEARCH_SENTENCES,
-    DEFAULT_SEARCH_RESULT_PREFIX,
+    DEFAULT_WEB_SEARCH,
+    DEFAULT_CODE_INTERPRETER,
+    DEFAULT_IMAGE_GENERATION,
+    DEFAULT_MEMORY,
     DEFAULT_STRIP_MARKDOWN,
     DEFAULT_VERIFY_SSL,
 )
@@ -76,9 +76,10 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_TIMEOUT: DEFAULT_TIMEOUT,
         CONF_MODEL: DEFAULT_MODEL,
         CONF_TOOL_IDS: DEFAULT_TOOL_IDS,
-        CONF_SEARCH_ENABLED: DEFAULT_SEARCH_ENABLED,
-        CONF_SEARCH_SENTENCES: DEFAULT_SEARCH_SENTENCES,
-        CONF_SEARCH_RESULT_PREFIX: DEFAULT_SEARCH_RESULT_PREFIX,
+        CONF_WEB_SEARCH: DEFAULT_WEB_SEARCH,
+        CONF_CODE_INTERPRETER: DEFAULT_CODE_INTERPRETER,
+        CONF_IMAGE_GENERATION: DEFAULT_IMAGE_GENERATION,
+        CONF_MEMORY: DEFAULT_MEMORY,
         CONF_STRIP_MARKDOWN: DEFAULT_STRIP_MARKDOWN,
     }
 )
@@ -238,17 +239,17 @@ class OpenWebUIOptionsFlow(config_entries.OptionsFlow):
             step_id="tools_config", data_schema=vol.Schema(schema)
         )
 
-    async def async_step_search_config(
+    async def async_step_features_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage Search Settings."""
+        """Manage Feature Settings."""
         if user_input is not None:
             self.options.update(user_input)
             return self.async_create_entry(title="", data=self.options)
 
-        schema = openwebui_schema_search_config(self.options)
+        schema = openwebui_schema_features_config(self.options)
         return self.async_show_form(
-            step_id="search_config", data_schema=vol.Schema(schema)
+            step_id="features_config", data_schema=vol.Schema(schema)
         )
 
 
@@ -341,36 +342,41 @@ def openwebui_schema_tools_config(
     }
 
 
-def openwebui_schema_search_config(options: MappingProxyType[str, Any]) -> dict:
-    """Return a schema for search config."""
+def openwebui_schema_features_config(options: MappingProxyType[str, Any]) -> dict:
+    """Return a schema for feature config."""
     if not options:
         options = DEFAULT_OPTIONS
     return {
         vol.Required(
-            CONF_SEARCH_ENABLED,
+            CONF_WEB_SEARCH,
             description={
-                "suggested_value": options.get(
-                    CONF_SEARCH_ENABLED, DEFAULT_SEARCH_ENABLED
-                )
+                "suggested_value": options.get(CONF_WEB_SEARCH, DEFAULT_WEB_SEARCH)
             },
-            default=DEFAULT_SEARCH_ENABLED,
+            default=DEFAULT_WEB_SEARCH,
         ): BooleanSelector(BooleanSelectorConfig()),
         vol.Required(
-            CONF_SEARCH_SENTENCES,
+            CONF_CODE_INTERPRETER,
             description={
                 "suggested_value": options.get(
-                    CONF_SEARCH_SENTENCES, DEFAULT_SEARCH_SENTENCES
+                    CONF_CODE_INTERPRETER, DEFAULT_CODE_INTERPRETER
                 )
             },
-            default=DEFAULT_SEARCH_SENTENCES,
-        ): TemplateSelector(TemplateSelectorConfig()),
-        vol.Optional(
-            CONF_SEARCH_RESULT_PREFIX,
+            default=DEFAULT_CODE_INTERPRETER,
+        ): BooleanSelector(BooleanSelectorConfig()),
+        vol.Required(
+            CONF_IMAGE_GENERATION,
             description={
                 "suggested_value": options.get(
-                    CONF_SEARCH_RESULT_PREFIX, DEFAULT_SEARCH_RESULT_PREFIX
+                    CONF_IMAGE_GENERATION, DEFAULT_IMAGE_GENERATION
                 )
             },
-            default=DEFAULT_SEARCH_RESULT_PREFIX,
-        ): TextSelector(TextSelectorConfig(multiline=False)),
+            default=DEFAULT_IMAGE_GENERATION,
+        ): BooleanSelector(BooleanSelectorConfig()),
+        vol.Required(
+            CONF_MEMORY,
+            description={
+                "suggested_value": options.get(CONF_MEMORY, DEFAULT_MEMORY)
+            },
+            default=DEFAULT_MEMORY,
+        ): BooleanSelector(BooleanSelectorConfig()),
     }
